@@ -7,7 +7,999 @@
 </head>
 <body>
 <title>3L Set Solver</title><!doctype html>
+<html lang="en"><!doctype html>
 <html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>3L Set Solver</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: two-column workbench. Left = add gear + inventory by slot. Right = sticky solved set. Stacks on phones. */
+:root{
+  --bg:#eef1f6; --surface:#ffffff; --sunk:#e3e8f0; --fg:#1a2233; --muted:#5b6679; --line:#cfd6e2;
+  --accent:#d9541e; --on-accent:#ffffff; --good:#1f8a4c; --warn:#a96a12;
+  --c-dl:#7a5cf0; --c-wh:#2f9bd6; --c-reg:#1fa67a; --c-atk:#e0484d; --c-class:#c98a1b; --c-crit:#d6409f; --c-other:#8590a3;
+  --display:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+  --body:"Inter","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121722; --surface:#1b2230; --sunk:#141a26; --fg:#e8ecf4; --muted:#98a3b6; --line:#2e384b;
+  --accent:#ff8a4c; --on-accent:#1a1208; --good:#4cc38a; --warn:#e0b050; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#121722; --surface:#1b2230; --sunk:#141a26; --fg:#e8ecf4; --muted:#98a3b6; --line:#2e384b;
+  --accent:#ff8a4c; --on-accent:#1a1208; --good:#4cc38a; --warn:#e0b050; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.45;
+  padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header h1{font-family:var(--display);font-size:26px;font-weight:700;margin:0;letter-spacing:-.01em}
+header p{margin:4px 0 0;color:var(--muted);max-width:65ch}
+h2{font-family:var(--display);font-size:16px;font-weight:700;margin:0}
+.label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.spread{justify-content:space-between}
+
+.banner{background:var(--sunk);border:1px dashed var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+
+.tabs button{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font-weight:600}
+.tabs button .n{color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums;margin-left:4px}
+.tabs button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.tabs button[aria-pressed="true"] .n{color:inherit;opacity:.8}
+
+.chip{--c:var(--c-other);display:inline-flex;align-items:center;gap:6px;border-radius:5px;padding:3px 8px;font-size:12.5px;font-weight:500;white-space:nowrap;
+  background:color-mix(in oklab,var(--c) 16%,var(--surface));border:1px solid color-mix(in oklab,var(--c) 50%,var(--surface))}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c);flex:none}
+.chip.wasted{opacity:.5;text-decoration:line-through}
+.chip.empty{background:transparent;border-style:dashed;border-color:var(--line);color:var(--muted)}
+.chip.empty::before{display:none}
+button.chip{padding:8px 12px;font-size:13.5px}
+button.chip:disabled{opacity:.35;cursor:not-allowed}
+button.chip:not(:disabled):hover{background:color-mix(in oklab,var(--c) 30%,var(--surface))}
+.s-dl{--c:var(--c-dl)} .s-wh{--c:var(--c-wh)} .s-reg{--c:var(--c-reg)} .s-atk{--c:var(--c-atk)} .s-crit{--c:var(--c-crit)}
+.s-mage,.s-pirate,.s-thief,.s-warrior,.s-archer{--c:var(--c-class)}
+
+.ghost{background:transparent;border:1px solid var(--line);border-radius:6px;padding:5px 10px;color:var(--muted)}
+.ghost:hover{color:var(--fg);border-color:var(--muted)}
+.ghost.danger{color:var(--c-atk);border-color:var(--c-atk)}
+
+.slots{display:grid;gap:14px 20px;grid-auto-flow:column;grid-template-rows:repeat(3,auto);grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:560px){ .slots{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:minmax(0,1fr)} }
+.picker{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-start}
+.tabs{display:grid;grid-auto-flow:column;grid-template-rows:repeat(3,auto);grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.tabs button{display:flex;justify-content:space-between;gap:10px;text-align:left}
+.cols{display:grid;grid-template-columns:repeat(3,auto);gap:6px 12px;align-items:start}
+.col{display:flex;flex-direction:column;gap:6px;min-width:0}
+.col .chip{justify-content:flex-start}
+.chip.has-icon::before{display:none}
+.chip svg{width:14px;height:14px;flex:none;color:color-mix(in oklab,var(--c) 70%,var(--fg))}
+.slot{display:flex;flex-direction:column;gap:8px;min-width:0}
+.slot-head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:6px}
+.slot-head h3{font-family:var(--display);font-size:14px;margin:0}
+.item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;border:1px solid transparent}
+.item .num{font-variant-numeric:tabular-nums;color:var(--muted);width:22px;flex:none;font-weight:600}
+.item .lines{display:flex;flex-wrap:wrap;gap:4px;flex:1;min-width:0}
+.item.picked{border-color:var(--good);background:color-mix(in oklab,var(--good) 9%,var(--surface))}
+.item.picked .num{color:var(--good)}
+.x{background:transparent;border:0;color:var(--muted);font-size:16px;line-height:1;padding:4px 6px;border-radius:4px;flex:none}
+.x:hover{color:var(--c-atk)}
+.none{color:var(--muted);padding:6px 8px}
+
+.score{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.score .big{font-family:var(--display);font-size:40px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.score .of{color:var(--muted)}
+.pill{font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px}
+.pill.ok{background:color-mix(in oklab,var(--good) 18%,var(--surface));color:var(--good)}
+.pill.short{background:color-mix(in oklab,var(--warn) 18%,var(--surface));color:var(--warn)}
+
+.reqs{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
+.req{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.req.miss .name{color:var(--warn);font-weight:600}
+.pips{display:flex;gap:3px}
+.pip{width:10px;height:10px;border-radius:2px;border:1.5px solid var(--c);background:transparent}
+.pip.on{background:var(--c)}
+
+.set{display:flex;flex-direction:column;gap:6px}
+.set .item{padding:5px 0;border:0}
+.set .slotname{width:68px;flex:none;font-weight:600}
+.set .num{width:auto}
+.hunt{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.hunt .opt{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.hunt .opt b{width:68px;flex:none}
+.muted{color:var(--muted)}
+
+/* ---- page layout: capture + gear side by side, manual add and solver below ---- */
+.wrap{max-width:1280px}
+.stack{display:flex;flex-direction:column;gap:16px}
+.bench{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:16px;align-items:start}
+@media (max-width:900px){.bench{grid-template-columns:minmax(0,1fr)}}
+#result{position:static}
+details.coll{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0}
+details.coll>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;font-family:var(--display);font-weight:700;font-size:16px;user-select:none}
+details.coll>summary::-webkit-details-marker{display:none}
+details.coll>summary::before{content:"";width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;flex:none}
+details.coll[open]>summary::before{transform:rotate(45deg)}
+details.coll>summary:hover{background:var(--sunk)}
+details.coll>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+details.coll>.panel{border:0;border-top:1px solid var(--line);border-radius:0 0 10px 10px;background:transparent}
+.badge{margin-left:auto;font-family:var(--body);font-size:12px;font-weight:600;color:var(--muted);text-align:right}
+.badge[data-ok="1"]{color:var(--good)}
+
+/* ---- buttons, inputs ---- */
+.primary{background:var(--accent);color:var(--on-accent);border:1px solid var(--accent);border-radius:6px;padding:8px 14px;font-weight:600}
+.check{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.small{font-size:12px}
+select{font:inherit;color:var(--fg);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:5px 8px;max-width:100%}
+details summary{cursor:pointer}
+#capture .row button{min-height:38px}
+#inv>.row:first-child{min-height:34px}
+.foot{margin-top:4px;text-align:center;color:var(--muted);font-size:12px}
+.foot hr{border:0;border-top:1px solid var(--line);margin:8px 0 10px}
+.foot p{margin:0}
+
+/* ---- the screen preview ---- */
+.stage{position:relative;width:100%;aspect-ratio:16/9;max-height:62vh;background:#0b0f17;border:1px solid var(--line);border-radius:8px;overflow:hidden;touch-action:none;user-select:none}
+.vid{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);cursor:crosshair;background:#000}
+.vid video{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.stage .ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:16px;color:#8b97ad;font-size:13px;line-height:1.5}
+.boxes{position:absolute;inset:0;pointer-events:none}
+.box{position:absolute;border:2px solid #8b97ad;border-radius:4px;pointer-events:none}
+.box span{position:absolute;left:0;top:0;font-size:11px;font-weight:700;padding:1px 6px;border-radius:0 0 4px 0;color:#0b0f17;background:#8b97ad}
+.box.k-saved{border-color:var(--good)} .box.k-saved span{background:var(--good)}
+.box.k-skip,.box.k-warn{border-color:var(--warn)} .box.k-skip span,.box.k-warn span{background:var(--warn)}
+.sel{position:absolute;border:2px dashed var(--accent);background:color-mix(in oklab,var(--accent) 16%,transparent);pointer-events:none}
+.vid.scanning::after{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,transparent,var(--accent),transparent);box-shadow:0 0 14px 2px var(--accent);animation:sweep 1.1s ease-in-out infinite alternate;pointer-events:none}
+@keyframes sweep{from{top:0}to{top:calc(100% - 3px)}}
+
+/* ---- what was read last ---- */
+.last{min-height:96px;display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--sunk);justify-content:center}
+.lr{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lr .slotname{width:54px;flex:none;font-weight:600}
+.lr .lines{display:flex;flex-wrap:wrap;gap:4px}
+.lr .tag{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted)}
+.lr.k-saved .tag{color:var(--good)} .lr.k-skip .tag,.lr.k-warn .tag{color:var(--warn)}
+#cap-raw{margin:6px 0 0;max-height:200px;overflow:auto;font-size:12px;white-space:pre-wrap;background:var(--sunk);padding:8px;border-radius:6px}
+
+/* ---- gear list: all six slots visible together, each list scrolls on its own ---- */
+#inv .slots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-flow:row;grid-template-rows:none;gap:12px}
+@media (max-width:560px){#inv .slots{grid-template-columns:minmax(0,1fr)}}
+#inv .slot{gap:4px}
+.slotlist{height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:2px;scrollbar-gutter:stable}
+#inv .item{padding:3px 4px;gap:5px;flex:none;align-items:center}
+#inv .item .num{width:24px;font-size:12px}
+#inv .item .lines{flex-wrap:nowrap}
+#inv .item .x{padding:2px 4px}
+#inv .item .lines{gap:3px}
+#inv .chip{padding:2px 5px;font-size:12px;gap:3px;white-space:nowrap}
+#inv .chip svg{width:12px;height:12px}
+#inv .none{padding:4px}
+
+/* ---- status banner, saved flash, toast ---- */
+.stat{position:relative;display:flex;align-items:center;gap:10px;padding:10px 14px;height:64px;border-radius:8px;border:1px solid var(--line);background:var(--sunk);font-weight:600;overflow:hidden;transition:background .2s,border-color .2s,color .2s}
+#cap-status{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-width:0}
+.stat .ic{width:22px;height:22px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:13px;line-height:1;color:var(--bg);background:var(--muted)}
+.stat[data-k=idle] .ic::before{content:"\2022"}
+.stat[data-k=ready] .ic{background:var(--good);animation:pulse 1.6s ease-in-out infinite}
+.stat[data-k=ready] .ic::before{content:"\25CF";font-size:9px}
+.stat[data-k=reading]{border-color:var(--accent);background:color-mix(in oklab,var(--accent) 12%,var(--surface))}
+.stat[data-k=reading] .ic{background:transparent;border:3px solid color-mix(in oklab,var(--accent) 30%,transparent);border-top-color:var(--accent);animation:spin .8s linear infinite}
+.stat[data-k=saved]{border-color:var(--good);background:color-mix(in oklab,var(--good) 16%,var(--surface));color:var(--good)}
+.stat[data-k=saved] .ic{background:var(--good)}
+.stat[data-k=saved] .ic::before{content:"\2713";font-weight:700}
+.stat[data-k=review]{border-color:var(--warn);background:color-mix(in oklab,var(--warn) 14%,var(--surface));color:var(--warn)}
+.stat[data-k=review] .ic{background:var(--warn)}
+.stat[data-k=review] .ic::before{content:"!";font-weight:700}
+.stat[data-k=dup] .ic::before{content:"="}
+.stat[data-k=error]{border-color:var(--c-atk);color:var(--c-atk)}
+.stat[data-k=error] .ic{background:var(--c-atk)}
+.stat[data-k=error] .ic::before{content:"\00D7";font-weight:700}
+.stat .bar{position:absolute;left:0;bottom:0;height:3px;width:100%;display:none;background:linear-gradient(90deg,transparent,var(--accent),transparent) no-repeat;background-size:40% 100%;animation:slide 1s linear infinite}
+.stat[data-k=reading] .bar{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes slide{from{background-position:-40% 0}to{background-position:140% 0}}
+@keyframes pulse{50%{opacity:.35}}
+.item.flash{animation:flash 2.2s ease-out}
+@keyframes flash{0%,35%{background:color-mix(in oklab,var(--good) 40%,var(--surface));box-shadow:0 0 0 3px var(--good)}100%{box-shadow:0 0 0 3px transparent}}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:var(--good);color:var(--bg);padding:10px 18px;border-radius:999px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.28);transition:opacity .25s,transform .25s;z-index:90;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){.stat .ic,.stat .bar,.item.flash,.vid.scanning::after{animation:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>3L Set Solver</h1>
+    <p>Add every 3-line piece you own. The solver picks one per slot to hit 3 Dimensional Leap, 3 White Hole, 3 Registry, 3 ATK, one of each class (Mage, Pirate, Thief, Warrior, Bowman), and 1 Crit DMG.</p>
+  </header>
+  <div id="banner"></div>
+  <div class="stack">
+    <div class="bench">
+      <details class="coll" data-k="cap" open>
+        <summary><span class="t">Capture from screen</span><span class="badge" id="cap-count">0 captured this session</span></summary>
+        <section class="panel" id="capture">
+          <div class="row">
+            <button class="primary" id="cap-start">Share screen</button>
+            <button class="ghost" id="cap-now" disabled>Capture now</button>
+            <label class="check"><input type="checkbox" id="cap-auto" checked> Auto-capture</label>
+            <label class="check"><input type="checkbox" id="cap-sound" checked> Sound</label>
+            <button class="ghost" id="cap-reset" hidden>Use whole screen</button>
+          </div>
+          <div class="stat" id="cap-banner" data-k="idle" role="status" aria-live="polite"><span class="ic" aria-hidden="true"></span><span id="cap-status">Not sharing</span><div class="bar"></div></div>
+          <div class="stage" id="cap-view">
+            <div class="ph" id="cap-ph">Your screen shows here once you share it.<br>Hover a piece in your game inventory and it is read and saved for you.</div>
+            <div class="vid" id="cap-vid" hidden>
+              <video id="cap-video" muted playsinline></video>
+              <div class="boxes" id="cap-boxes"></div>
+              <div class="sel" id="cap-sel" hidden></div>
+            </div>
+          </div>
+          <div class="last" id="cap-last" aria-live="polite"></div>
+          <p class="muted small" style="margin:0">Tip: drag a box on the preview around where tooltips show up to read faster. Keep this page visible (second monitor or side by side) so the browser does not pause it. Your gear is saved in this browser.</p>
+          <details id="cap-debug"><summary class="muted">What it read last</summary><pre id="cap-raw">Nothing yet.</pre></details>
+        </section>
+      </details>
+      <details class="coll" data-k="inv" open>
+        <summary><span class="t">Your 3L gear</span><span class="badge" id="inv-count">0</span></summary>
+        <section class="panel" id="inv"></section>
+      </details>
+    </div>
+    <details class="coll" data-k="add">
+      <summary><span class="t">Add a piece manually</span><span class="badge">pick the slot, then 3 lines</span></summary>
+      <section class="panel" id="add"></section>
+    </details>
+    <details class="coll" data-k="res" open>
+      <summary><span class="t">Solver: best set</span><span class="badge" id="res-badge"></span></summary>
+      <section class="panel" id="result"></section>
+    </details>
+  </div>
+  <footer class="foot" id="page-end"><hr><p>End of page. Your gear is saved in this browser only, nothing is uploaded.</p></footer>
+</div>
+
+<script>
+const SLOTS = ['Hat','Top','Bottom','Cape','Glove','Shoe'];
+const noDupes = lines => { const real = lines.filter(k=>k!=='other'); return new Set(real).size===real.length; };
+const STATS = [
+  {k:'dl',n:'Dimensional Leap',t:3},{k:'wh',n:'White Hole',t:3},{k:'reg',n:'Registry',t:3},{k:'atk',n:'ATK',t:3},
+  {k:'mage',n:'Mage',t:1},{k:'pirate',n:'Pirate',t:1},{k:'thief',n:'Thief',t:1},{k:'warrior',n:'Warrior',t:1},{k:'archer',n:'Bowman',t:1},
+  {k:'crit',n:'Crit DMG',t:1}
+];
+const NAME = {other:'Other'}; const IDX = {}; const T = []; const R = []; const M = [];
+let mult = 1;
+STATS.forEach((s,i)=>{ NAME[s.k]=s.n; IDX[s.k]=i; T[i]=s.t; R[i]=s.t+1; M[i]=mult; mult*=R[i]; });
+const TOTAL = T.reduce((a,b)=>a+b,0); // 18
+
+// ---------- solver: DP over capped stat counts ----------
+function addLines(st, lines){
+  for(const k of lines){ const i=IDX[k]; if(i===undefined) continue;
+    if(Math.floor(st/M[i])%R[i] < T[i]) st += M[i]; }
+  return st;
+}
+function digits(st){ return T.map((_,i)=>Math.floor(st/M[i])%R[i]); }
+function score(st){ return digits(st).reduce((a,b)=>a+b,0); }
+
+function runDP(items, skip){
+  let cur = new Map([[0,{ways:1}]]); const layers = [];
+  SLOTS.forEach((_,s)=>{
+    if(s===skip) return;
+    const opts = items[s].length ? items[s] : [null];
+    const next = new Map();
+    for(const [st,info] of cur) for(const it of opts){
+      const ns = it ? addLines(st,it.lines) : st;
+      const e = next.get(ns);
+      if(e) e.ways += info.ways; else next.set(ns,{prev:st,item:it,slot:s,ways:info.ways});
+    }
+    layers.push(next); cur = next;
+  });
+  return layers;
+}
+function solve(items){
+  const layers = runDP(items,-1);
+  let best=-1, bestSt=0;
+  for(const st of layers[layers.length-1].keys()){ const sc=score(st); if(sc>best){best=sc;bestSt=st;} }
+  const ways = layers[layers.length-1].get(bestSt).ways;
+  const picks = Array(SLOTS.length).fill(null);
+  let st = bestSt;
+  for(let l=layers.length-1;l>=0;l--){ const e=layers[l].get(st); picks[e.slot]=e.item; st=e.prev; }
+  // which lines in the chosen set count toward the goal
+  const run = T.map(()=>0);
+  const used = picks.map(it => it ? it.lines.map(k=>{ const i=IDX[k]; if(i===undefined||run[i]>=T[i]) return false; run[i]++; return true; }) : []);
+  // one-piece-away options: for each slot, which 3 lines would finish the set
+  const hunt = [];
+  if(best<TOTAL) SLOTS.forEach((_,s)=>{
+    const ls = runDP(items,s); const seen = new Set();
+    for(const st2 of ls[ls.length-1].keys()){
+      if(score(st2)!==TOTAL-3) continue;
+      const d = digits(st2); const need=[];
+      d.forEach((c,i)=>{ for(let j=c;j<T[i];j++) need.push(STATS[i].k); });
+      if(!noDupes(need)) continue; // a piece cannot roll the same line twice
+      const key = need.join(','); if(!seen.has(key)){ seen.add(key); hunt.push({slot:s,need}); }
+    }
+  });
+  return {best, counts:digits(bestSt), picks, used, ways, hunt};
+}
+
+// ---------- state ----------
+const KEY = 'threeLineSetSolver.v1';
+const EXAMPLE = [
+  [['dl','atk','mage'],['atk','wh','other']],
+  [['wh','reg','crit'],['dl','mage','crit']],
+  [['reg','dl','pirate']],
+  [['atk','wh','thief'],['thief','archer','dl']],
+  [['dl','wh','warrior'],['crit','wh','reg']],
+  [['atk','reg','archer']]
+];
+let uid = 1;
+const mk = lines => ({id:uid++, lines});
+let state = {items:SLOTS.map(()=>[]), active:0, pending:[], example:false, confirmClear:false};
+function load(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(KEY));
+    if(raw && !raw.example && Array.isArray(raw.items) && raw.items.length===SLOTS.length){
+      state.items = raw.items.map(a=>a.filter(noDupes).map(l=>mk(l))); return;
+    }
+  }catch(e){}
+  state.items = SLOTS.map(()=>[]); state.example = false;
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify({items:state.items.map(a=>a.map(i=>i.lines)), example:state.example})); }catch(e){}
+}
+
+// ---------- render ----------
+const svg = d => `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  mage: svg('<path d="M3 13 10 6"/><path d="M12 1.5v5M9.5 4h5"/>'),
+  pirate: svg('<circle cx="8" cy="3" r="1.5"/><path d="M8 4.5V14M5 7.5h6M3 10c0 2.5 2 4 5 4s5-1.5 5-4"/>'),
+  thief: svg('<path d="M8 1.5 9.5 6.5 14.5 8 9.5 9.5 8 14.5 6.5 9.5 1.5 8 6.5 6.5Z" fill="currentColor"/>'),
+  warrior: svg('<path d="M13.5 2.5 6 10M4 8l4 4M5 11l-2.5 2.5"/>'),
+  archer: svg('<path d="M4 2q9 6 0 12M4 2v12M2 8h11M11 6l2 2-2 2"/>')
+};
+const GROUPS = [['dl','wh','reg'],['mage','pirate','thief','warrior','archer'],['crit','atk','other']];
+const chip = (k,extra='') => `<span class="chip s-${k} ${ICON[k]?'has-icon':''} ${extra}">${ICON[k]||''}${NAME[k]}</span>`;
+const SHORT = {dl:'D.Leap', wh:'W.Hole', reg:'Registry', atk:'ATK', crit:'Crit'};
+const chipS = (k,extra='') => `<span class="chip s-${k} ${ICON[k]?'has-icon':''} ${extra}" title="${NAME[k]}">${ICON[k]||''}${SHORT[k]||NAME[k]}</span>`;
+const statBtn = k => `<button class="chip s-${k} ${ICON[k]?'has-icon':''}" id="add-stat-${k}" data-act="stat" data-k="${k}" ${k!=='other'&&state.pending.includes(k)?'disabled':''}>${ICON[k]||''}${NAME[k]}</button>`;
+function render(){
+  const sc = [...document.querySelectorAll('#inv .slotlist')].map(e=>e.scrollTop);
+  renderCore();
+  document.querySelectorAll('#inv .slotlist').forEach((e,i)=>{ e.scrollTop = sc[i]||0; });
+}
+function renderCore(){
+  const res = solve(state.items);
+  const doneNow = res.best===TOTAL;
+  if(wasDone===false && doneNow) celebrate();
+  wasDone = doneNow;
+  const total =state.items.reduce((a,b)=>a+b.length,0);
+
+  document.getElementById('banner').innerHTML = state.example ? `<div class="banner">
+    <span><b>Example gear loaded.</b> These pieces are made up so you can see how it works.</span>
+    <button class="ghost" id="clear-example" data-act="clear-now">Clear and start mine</button></div>` : '';
+
+  const pend = [0,1,2].map(i => state.pending[i] ? chip(state.pending[i]) : `<span class="chip empty">line ${i+1}</span>`).join('');
+  document.getElementById('add').innerHTML = `
+    <div class="row spread"><span class="muted">Pick the slot, then tap its 3 different lines</span></div>
+    <div class="picker"><div class="tabs">${SLOTS.map((s,i)=>`<button id="slot-tab-${i}" data-act="slot" data-i="${i}" aria-pressed="${i===state.active}">${s}<span class="n">${state.items[i].length}</span></button>`).join('')}</div>
+    <div class="cols">${GROUPS.map(g=>`<div class="col">${g.map(statBtn).join('')}</div>`).join('')}</div></div>
+    <div class="row"><span class="label">New ${SLOTS[state.active]}</span>${pend}
+      ${state.pending.length?`<button class="ghost" id="undo-line" data-act="undo">Undo line</button>`:''}</div>`;
+
+  document.getElementById('inv').innerHTML = `
+    <div class="row spread"><span class="muted">${total} piece${total===1?'':'s'} in total. Green rows are in the best set.</span>
+      ${total?`<button class="ghost ${state.confirmClear?'danger':''}" id="clear-all" data-act="clear">${state.confirmClear?'Click again to clear everything':'Clear all'}</button>`:''}</div>
+    <div class="slots">${SLOTS.map((s,si)=>`<div class="slot">
+      <div class="slot-head"><h3>${s}</h3><span class="muted">${state.items[si].length}</span></div>
+      <div class="slotlist">${state.items[si].length ? state.items[si].map((it,n)=>`<div class="item ${res.picks[si]===it?'picked':''}">
+          <span class="num">#${n+1}</span><span class="lines">${it.lines.map(k=>chipS(k)).join('')}</span>
+          <button class="x" data-act="del" data-s="${si}" data-id="${it.id}" aria-label="Remove ${s} #${n+1}">&times;</button></div>`).join('')
+        : `<div class="none">No 3L ${s.toLowerCase()} yet</div>`}</div>
+    </div>`).join('')}</div>`;
+
+  const done = res.best===TOTAL;
+  const missing = []; res.counts.forEach((c,i)=>{ for(let j=c;j<T[i];j++) missing.push(STATS[i].k); });
+  let hunt = '';
+  if(!done){
+    if(res.hunt.length){
+      const shown = res.hunt.slice(0,8);
+      hunt = `<div class="hunt"><span class="label">One drop finishes it</span>
+        ${shown.map(h=>`<div class="opt"><b>${SLOTS[h.slot]}</b>${h.need.map(k=>chip(k)).join('')}</div>`).join('')}
+        ${res.hunt.length>shown.length?`<span class="muted">and ${res.hunt.length-shown.length} more options</span>`:''}</div>`;
+    } else {
+      hunt = `<div class="hunt"><span class="label">Still missing</span><div class="opt">${missing.map(k=>chip(k)).join('')}</div>
+        <span class="muted">More than one piece away. Keep adding 3L drops.</span></div>`;
+    }
+  }
+  document.getElementById('result').innerHTML = `
+    <div class="row spread"><span class="label">Result</span><span class="pill ${done?'ok':'short'}">${done?'Complete':(TOTAL-res.best)+' line'+(TOTAL-res.best===1?'':'s')+' short'}</span></div>
+    <div class="score"><span class="big">${res.best}</span><span class="of">of ${TOTAL} lines${done?`, ${res.ways} winning combo${res.ways===1?'':'s'}`:''}</span></div>
+    <div class="reqs">${STATS.map((s,i)=>`<div class="req s-${s.k} ${res.counts[i]<s.t?'miss':''}"><span class="name">${s.n}</span>
+      <span class="pips" title="${res.counts[i]} of ${s.t}">${Array.from({length:s.t},(_,j)=>`<span class="pip ${j<res.counts[i]?'on':''}"></span>`).join('')}</span></div>`).join('')}</div>
+    <div class="set"><span class="label">Equip these</span>
+      ${SLOTS.map((s,si)=>{ const it=res.picks[si];
+        return `<div class="item"><span class="slotname">${s}</span>${it?`<span class="num">#${state.items[si].indexOf(it)+1}</span>
+          <span class="lines">${it.lines.map((k,j)=>chip(k,res.used[si][j]?'':'wasted')).join('')}</span>`:`<span class="muted">nothing yet</span>`}</div>`; }).join('')}
+      ${res.used.some(u=>u.includes(false))?`<span class="muted">Struck-through lines do not count toward the goal.</span>`:''}
+    </div>${hunt}`;
+  const ic = document.getElementById('inv-count'); if(ic) ic.textContent = total + ' piece' + (total===1?'':'s');
+  const rb = document.getElementById('res-badge'); if(rb){ rb.textContent = done ? 'Complete, 18 of 18' : res.best + ' of ' + TOTAL + ' lines'; rb.dataset.ok = done ? '1' : '0'; }
+}
+
+// ---------- celebration when the set reaches 18/18 ----------
+let wasDone = null, audio = null;
+function celebrate(){ fireworks(); fanfare(); }
+function fanfare(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+    audio = audio || new AC(); audio.resume();
+    const t0 = audio.currentTime + 0.02;
+    [523.25,659.25,783.99,1046.5,1318.5].forEach((f,i)=>{
+      const o = audio.createOscillator(), g = audio.createGain(), t = t0 + i*0.11, len = i===4 ? 0.9 : 0.25;
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.2,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+len);
+      o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+len+0.05);
+    });
+    // firework pops: short bursts of filtered noise
+    const n = Math.floor(audio.sampleRate*0.35), buf = audio.createBuffer(1,n,audio.sampleRate), d = buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/n,3);
+    [0.15,0.55,0.9,1.3,1.75].forEach(dt=>{
+      const s = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
+      s.buffer = buf; f.type = 'lowpass'; f.frequency.value = 900 + Math.random()*1200; g.gain.value = 0.25;
+      s.connect(f); f.connect(g); g.connect(audio.destination); s.start(t0+dt);
+    });
+  }catch(e){}
+}
+function fireworks(){
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const c = document.createElement('canvas');
+  c.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:100';
+  document.body.appendChild(c);
+  const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
+  c.width = W*dpr; c.height = H*dpr;
+  const x = c.getContext('2d'); x.scale(dpr,dpr);
+  const cols = ['#7a5cf0','#2f9bd6','#1fa67a','#e0484d','#f0a92b','#d6409f','#ff8a4c'];
+  const BURSTS = 9; let parts = [], bursts = 0, nextAt = 0, last = performance.now(); const start = last;
+  function burst(){
+    const bx = W*(0.12+Math.random()*0.76), by = H*(0.12+Math.random()*0.45), col = cols[Math.floor(Math.random()*cols.length)];
+    for(let i=0;i<80;i++){
+      const a = Math.random()*Math.PI*2, v = 60+Math.random()*300;
+      parts.push({x:bx,y:by,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:1,decay:0.55+Math.random()*0.5,col});
+    }
+  }
+  function frame(now){
+    const dt = Math.min(0.05,(now-last)/1000); last = now;
+    if(bursts<BURSTS && now-start>=nextAt){ burst(); bursts++; nextAt = now-start+220+Math.random()*220; }
+    x.clearRect(0,0,W,H);
+    parts = parts.filter(p=>p.life>0);
+    for(const p of parts){
+      p.vx *= 0.985; p.vy = p.vy*0.985 + 160*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.life -= p.decay*dt;
+      x.globalAlpha = Math.max(0,p.life); x.fillStyle = p.col;
+      x.beginPath(); x.arc(p.x,p.y,2.3,0,Math.PI*2); x.fill();
+    }
+    if(bursts<BURSTS || parts.length) requestAnimationFrame(frame); else c.remove();
+  }
+  requestAnimationFrame(frame);
+}
+
+document.addEventListener('click', e=>{
+  const b = e.target.closest('[data-act]'); if(!b) return;
+  const act = b.dataset.act;
+  if(act!=='clear') state.confirmClear = false;
+  if(act==='slot'){ state.active=+b.dataset.i; state.pending=[]; }
+  else if(act==='stat'){
+    if(b.dataset.k!=='other' && state.pending.includes(b.dataset.k)) return;
+    state.pending.push(b.dataset.k);
+    if(state.pending.length===3){ state.items[state.active].push(mk(state.pending)); state.pending=[]; state.example = state.example && false; }
+  }
+  else if(act==='undo'){ state.pending.pop(); }
+  else if(act==='del'){ const s=+b.dataset.s; state.items[s]=state.items[s].filter(i=>i.id!==+b.dataset.id); }
+  else if(act==='clear'){
+    if(state.confirmClear){ state.items=SLOTS.map(()=>[]); state.pending=[]; state.example=false; state.confirmClear=false; }
+    else state.confirmClear = true;
+  }
+  else if(act==='clear-now'){ state.items=SLOTS.map(()=>[]); state.pending=[]; state.example=false; }
+  save(); render();
+  const id = b.id; if(id){ const again=document.getElementById(id); if(again) again.focus({preventScroll:true}); }
+});
+
+load(); render();
+
+// ===== capture parser (pure, no DOM): turns OCR words into tooltips =====
+const CAP_SLOT_RX = [
+  ['Hat', /\bhat\b|\bhelm|\bcap\b/],
+  ['Glove', /glove|gauntlet/],
+  ['Shoe', /shoe|boot|sandal/],
+  ['Cape', /cape|cloak|mantle/],
+  ['Bottom', /bottom|pants|trouser|skirt/],
+  ['Top', /\btop\b|overall|\bsuit\b|\brobe\b|\bcoat\b|\btunic\b|shirt/]
+];
+function capLev(a, b){
+  if(a === b) return 0;
+  let prev = [], cur = [];
+  for(let j=0;j<=b.length;j++) prev[j] = j;
+  for(let i=1;i<=a.length;i++){
+    cur = [i];
+    for(let j=1;j<=b.length;j++) cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1] + (a[i-1]===b[j-1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+// words inside a line, with digits that OCR swaps for letters put back (Ho1e -> hole, Reg1stry -> registry)
+const capToks = t => t.replace(/[A-Za-z]+[01][A-Za-z]*|[A-Za-z]*[01][A-Za-z]+/g, m=>m.replace(/0/g,'o').replace(/1/g,'l'))
+  .toLowerCase().replace(/\[[^\]]*\]?/g, ' ').split(/[^a-z]+/).filter(x=>x.length>1);
+// Whole-line match for when words got glued or split ("WhiteHole", "Whi te Hole"): compare the letters of the line
+// (minus "[Hologram]", "Skill", "Level", "Lv.") with the ten canonical lines.
+const CAP_CANON = [['wh','whitehole'],['reg','registry'],['dl','dimensionalleap'],['pirate','pirateattack'],['thief','thiefattack'],
+  ['warrior','warriorattack'],['mage','magicianattack'],['archer','bowmanattack'],['crit','criticaldamageenhancement'],['atk','attackpowermagicattenhancement']];
+function capClassifyLine(text){
+  const noise = (t, w, tol) => Math.abs(t.length-w.length) <= 1 && capLev(t, w) <= tol;
+  const joined = capToks(text).filter(t=>!(noise(t,'skill',1) || noise(t,'level',1) || noise(t,'hologram',2) || t==='lv' || t==='ly' || t==='lu')).join('');
+  if(joined.length < 4) return null;
+  let best = null, bestSim = 0;
+  for(const [k, c] of CAP_CANON){
+    const d = capLev(joined, c), sim = 1 - d/Math.max(joined.length, c.length);
+    if(sim > bestSim && d <= 4){ best = k; bestSim = sim; }
+  }
+  return bestSim >= 0.6 ? best : null;
+}
+function capClassify(text){ return capClassifyWords(text) || capClassifyLine(text); }
+// The ten known hologram lines. Words are matched fuzzily so one misread letter does not lose a line.
+function capClassifyWords(text){
+  const toks = capToks(text);
+  const has = w => toks.some(t => Math.abs(t.length-w.length) <= 2 && capLev(t, w) <= (w.length>=8 ? 2 : 1));
+  if(has('registry')) return 'reg';
+  if(has('dimensional') || has('leap')) return 'dl';
+  if(has('hole') || has('white')) return 'wh';
+  if(has('pirate')) return 'pirate';
+  if(has('thief')) return 'thief';
+  if(has('warrior')) return 'warrior';
+  if(has('magician') || has('mage')) return 'mage';
+  if(has('bowman') || has('archer')) return 'archer';
+  if(has('critical') || (has('damage') && has('enhancement'))) return 'crit';
+  if(has('power') || (has('magic') && (has('att') || has('enhancement')))) return 'atk';
+  return null; // not one of ours: the caller files it as "other"
+}
+const CAP_HOLO_RX = /h[o0]l[o0a]gr/i;                       // "[Hologram]" prefix
+const CAP_LV_RX = /\bl[vyu]\W{0,2}\s*\+\s*[\dliI|!]/i;       // "Lv. +1" (also Ly. / Lv+l)
+const CAP_END_RX = /scr[o0]ll|remaining|restore|jewel|enhancement\s*none|potential|interact|harvest/i;
+// ordinary gear stat lines, e.g. "Attack Power +14 (10 +4)", "Max HP +385", "STR: +7%"
+const CAP_STAT_RX = /^\W*(?:str|dex|int|luk|def|all\s*stats?|max\s*hp|max\s*mp|attack\s*power|magic\s*att(?:ack)?|defense|speed|jump|enemy\s*def\w*(?:\s*ignored)?|boss\s*damage|damage|crit\w*\s*(?:rate|damage)?)\s*[:+\-]?\s*[+\-]?\s*\d/i;
+const capIsReq = s => { const t = s.toLowerCase().replace(/[^a-z]/g,''); return t.length>=6 && t.length<=10 && capLev(t,'required') <= 2; };
+const capLineHasReq = s => capToks(s).some(t => t.length>=6 && t.length<=10 && capLev(t,'required') <= 2);
+
+function capDetectSlot(headerLines){
+  const tail = headerLines.slice(-3).join(' ').toLowerCase();
+  const all = headerLines.join(' ').toLowerCase();
+  for(const text of [tail, all]) for(const [name, rx] of CAP_SLOT_RX) if(rx.test(text)) return name;
+  return null;
+}
+function capGroupLines(ws){
+  const sorted = ws.slice().sort((a,b)=>(a.y0+a.y1)-(b.y0+b.y1));
+  const lines = [];
+  for(const w of sorted){
+    const cy = (w.y0+w.y1)/2, h = Math.max(1, w.y1-w.y0), last = lines[lines.length-1];
+    if(last && Math.abs(last.cy-cy) < Math.max(last.h,h)*0.55){
+      last.w.push(w); last.cy = (last.cy*(last.w.length-1)+cy)/last.w.length; last.h = Math.max(last.h,h);
+    } else lines.push({cy, h, w:[w]});
+  }
+  return lines.map(l=>{ l.w.sort((a,b)=>a.x0-b.x0); return {y:l.cy, text:l.w.map(w=>w.text).join(' ')}; });
+}
+// words: [{text,x0,y0,x1,y1}] from OCR. Returns one entry per tooltip, left to right.
+//   lines    always exactly 3 stat keys (missing or unknown ones are "other")
+//   found    how many hologram lines were actually seen (0 = this is not a hologram piece)
+//   complete true when the "Scroll Enhancement" line below the hologram block was seen
+function capParseTooltips(words){
+  words = (words||[]).filter(w=>w && w.text);
+  if(!words.length) return [];
+  const hs = words.map(w=>w.y1-w.y0).sort((a,b)=>a-b);
+  const tol = Math.max(12, (hs[Math.floor(hs.length/2)]||12)*1.3);
+  // Each tooltip has "Required Job / Required Level" at its left margin: that marks the tooltip columns.
+  const reqs = words.filter(w=>capIsReq(w.text)).sort((a,b)=>a.x0-b.x0);
+  const cols = [];
+  for(const w of reqs){
+    const c = cols.find(c=>Math.abs(c.left-w.x0) < tol*1.5);
+    if(c) c.left = Math.min(c.left, w.x0); else cols.push({left:w.x0, words:[]});
+  }
+  if(!cols.length) cols.push({left:Math.min(...words.map(w=>w.x0)), words:[]}); // misread "Required": treat all as one tooltip
+  cols.sort((a,b)=>a.left-b.left);
+  for(const w of words){
+    let best = -1;
+    for(let i=0;i<cols.length;i++) if(w.x0 >= cols[i].left - tol) best = i;
+    if(best>=0) cols[best].words.push(w);
+  }
+  return cols.filter(c=>c.words.length).map(col=>{
+    const lines = capGroupLines(col.words);
+    let ri = lines.findIndex(l=>capLineHasReq(l.text) && /job|level/i.test(l.text));
+    if(ri<0) ri = lines.findIndex(l=>capLineHasReq(l.text));
+    const header = lines.slice(0, Math.max(0,ri)).map(l=>l.text);
+    const body = lines.slice(ri+1);
+    const cands = []; let complete = false;
+    for(const l of body){
+      const t = l.text.replace(/\s+/g,' ').trim(); if(!t) continue;
+      if(CAP_END_RX.test(t)){ complete = true; break; }
+      if(capLineHasReq(t) || /set\s*effect/i.test(t)) continue;
+      if(CAP_STAT_RX.test(t)) continue;
+      const pre = CAP_HOLO_RX.test(t), lv = CAP_LV_RX.test(t), key = capClassify(t);
+      const prev = cands[cands.length-1];
+      // second half of a wrapped line ("Skill Lv. +1" under "Attack Power & Magic ATT Enhancement")
+      if(prev && !prev.lv && !pre && key===null){
+        if(lv || t.split(' ').length <= 4){ prev.text += ' ' + t; prev.lv = prev.lv || lv; prev.key = prev.key || capClassify(prev.text); }
+        continue;
+      }
+      const statNums = /\d{2,}|\(|%/.test(t);
+      if((pre || lv || key) && (pre || lv || !statNums)) cands.push({text:t, lv, key});
+    }
+    const keys = cands.slice(0,3).map(c=>c.key || 'other');
+    const found = keys.length;
+    while(keys.length < 3) keys.push('other');
+    const all = col.words;
+    return {
+      slot: capDetectSlot(header),
+      equipped: /currently\s*equipped/i.test(header.join(' ')),
+      lines: keys,
+      found,
+      padded: found>0 ? 3-found : 0,
+      raw: cands.map(c=>c.text),
+      complete,
+      n: found,
+      left: col.left,
+      box: {x0:Math.min(...all.map(w=>w.x0)), y0:Math.min(...all.map(w=>w.y0)), x1:Math.max(...all.map(w=>w.x1)), y1:Math.max(...all.map(w=>w.y1))}
+    };
+  });
+}
+// ===== end capture parser =====
+
+// ===== capture runtime: screen share, OCR, inventory glue =====
+(function(){
+  const $ = id => document.getElementById(id);
+  const panel = $('capture');
+  if(!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)){ (panel.closest('details') || panel).hidden = true; return; }
+  const CAP = {stream:null, video:$('cap-video'), prev:null, last:null, busy:false, region:null, layout:null, psm:null,
+    saved:0, tw:null, url:null, iv:null,
+    canvas:document.createElement('canvas'), thumb:document.createElement('canvas'), sigc:document.createElement('canvas')};
+  const stage = $('cap-view'), vid = $('cap-vid');
+
+  // status banner: idle | ready | reading | saved | review | dup | error
+  const setStatus = (msg, kind='idle') => {
+    $('cap-banner').dataset.k = kind; $('cap-status').textContent = msg;
+    vid.classList.toggle('scanning', kind==='reading' && !!CAP.stream);
+  };
+  const desc = (si, lines) => SLOTS[si] + ': ' + lines.map(k=>NAME[k]).join(' + ');
+  let toastEl = null, toastT = null, ac = null;
+  function toast(msg){
+    if(!toastEl){ toastEl = document.createElement('div'); toastEl.className = 'toast'; toastEl.setAttribute('role','status'); document.body.appendChild(toastEl); }
+    toastEl.textContent = msg; toastEl.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(()=>toastEl.classList.remove('show'), 2600);
+  }
+  function beep(){ // short two-note chime when a piece is saved
+    if(!$('cap-sound').checked) return;
+    try{
+      const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+      ac = ac || new AC(); ac.resume();
+      const t0 = ac.currentTime + 0.01;
+      [880, 1318.5].forEach((f,i)=>{
+        const o = ac.createOscillator(), g = ac.createGain(), s = t0 + i*0.09;
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.15, s+0.01); g.gain.exponentialRampToValueAtTime(0.0001, s+0.16);
+        o.connect(g); g.connect(ac.destination); o.start(s); o.stop(s+0.2);
+      });
+    }catch(e){}
+  }
+  function flash(id){ // highlight the new row, and scroll only its own list (never the page)
+    const b = document.querySelector('#inv .x[data-id="'+id+'"]'), el = b && b.closest('.item'); if(!el) return;
+    const list = el.closest('.slotlist'); if(list) list.scrollTop = list.scrollHeight;
+    el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'), 2200);
+  }
+  function onSaved(it, si, lines){
+    CAP.saved++; $('cap-count').textContent = CAP.saved + ' captured this session';
+    flash(it.id); beep(); toast('✓ Saved ' + desc(si, lines));
+  }
+
+  // --- text reader (Tesseract.js), loaded the first time you share ---
+  let workerPromise = null;
+  function getWorker(){
+    if(!workerPromise) workerPromise = new Promise((res, rej)=>{
+      if(window.Tesseract) return res(window.Tesseract);
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      s.onload = () => res(window.Tesseract);
+      s.onerror = () => rej(new Error('Could not load the text reader. Check your connection or ad blocker.'));
+      document.head.appendChild(s);
+    }).then(async Tess=>{
+      const w = await Tess.createWorker('eng', 1, {});
+      await w.setParameters({tessedit_pageseg_mode:'3', preserve_interword_spaces:'1'});
+      return w;
+    }).catch(e=>{ workerPromise = null; throw e; });
+    return workerPromise;
+  }
+
+  // --- frame helpers ---
+  function regionRect(vw, vh){
+    const r = CAP.region || {x:0, y:0, w:1, h:1};
+    const sx = Math.round(r.x*vw), sy = Math.round(r.y*vh);
+    return {sx, sy, sw:Math.max(8, Math.min(vw-sx, Math.round(r.w*vw))), sh:Math.max(8, Math.min(vh-sy, Math.round(r.h*vh)))};
+  }
+  const regionKey = () => JSON.stringify(CAP.region) + '|' + CAP.video.videoWidth + 'x' + CAP.video.videoHeight;
+  function sample(){ // tiny grayscale thumbnail of the whole watched area, used to notice when the screen changes
+    const v = CAP.video; if(!v.videoWidth) return null;
+    const {sx,sy,sw,sh} = regionRect(v.videoWidth, v.videoHeight);
+    const W = 128, H = Math.max(8, Math.round(128*sh/sw)), c = CAP.thumb;
+    if(c.width!==W || c.height!==H){ c.width = W; c.height = H; }
+    const x = c.getContext('2d', {willReadFrequently:true}); x.drawImage(v, sx, sy, sw, sh, 0, 0, W, H);
+    return gray(x.getImageData(0, 0, W, H).data, W*H);
+  }
+  function rectSig(r){ // fingerprint of one tooltip's area: lets us skip a tooltip that has not changed
+    const c = CAP.sigc; if(c.width!==64){ c.width = 64; c.height = 64; }
+    const x = c.getContext('2d', {willReadFrequently:true}); x.drawImage(CAP.video, r.sx, r.sy, r.sw, r.sh, 0, 0, 64, 64);
+    return gray(x.getImageData(0, 0, 64, 64).data, 4096);
+  }
+  function gray(d, n){ const g = new Uint8Array(n); for(let i=0,j=0;j<n;i+=4,j++) g[j] = (d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114)|0; return g; }
+  function diff(a, b){
+    if(!a || !b || a.length!==b.length) return Infinity;
+    let s = 0; for(let i=0;i<a.length;i++) s += Math.abs(a[i]-b[i]);
+    return s/a.length;
+  }
+  // crop a video area, scale it, grayscale + invert (dark text on light reads better) + contrast
+  function grab(r, scale, c, contrast){
+    const W = Math.max(8, Math.round(r.sw*scale)), H = Math.max(8, Math.round(r.sh*scale));
+    c.width = W; c.height = H;
+    const x = c.getContext('2d', {willReadFrequently:true}); x.imageSmoothingQuality = 'high';
+    x.drawImage(CAP.video, r.sx, r.sy, r.sw, r.sh, 0, 0, W, H);
+    const img = x.getImageData(0, 0, W, H), d = img.data;
+    for(let i=0;i<d.length;i+=4){
+      let g = 255 - (d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114);
+      g = (g-128)*(contrast||1.4) + 128; g = g<0 ? 0 : g>255 ? 255 : g;
+      d[i] = d[i+1] = d[i+2] = g;
+    }
+    x.putImageData(img, 0, 0);
+    return c;
+  }
+  function wordsOf(data){
+    let ws = data.words;
+    if(!ws || !ws.length){ ws = []; (data.blocks||[]).forEach(b=>(b.paragraphs||[]).forEach(p=>(p.lines||[]).forEach(l=>(l.words||[]).forEach(w=>ws.push(w))))); }
+    return ws.filter(w=>w.text && w.text.trim()).map(w=>({text:w.text.trim(), x0:w.bbox.x0, y0:w.bbox.y0, x1:w.bbox.x1, y1:w.bbox.y1}));
+  }
+  async function ocr(worker, canvas){
+    const {data} = await worker.recognize(canvas);
+    return wordsOf(data);
+  }
+
+  // --- what you see while scanning: boxes over the preview, and a "last scan" card ---
+  function drawBoxes(rows){
+    const v = CAP.video, el = $('cap-boxes'); if(!v.videoWidth){ el.innerHTML = ''; return; }
+    el.innerHTML = rows.filter(r=>r.rect).map(r=>{
+      const q = r.rect, p = n => (n*100).toFixed(2) + '%';
+      return `<div class="box k-${r.kind}" style="left:${p(q.sx/v.videoWidth)};top:${p(q.sy/v.videoHeight)};width:${p(q.sw/v.videoWidth)};height:${p(q.sh/v.videoHeight)}"><span>${r.slot||'?'} ${r.kind==='saved'?'✓':r.kind==='dup'?'=':'!'}</span></div>`;
+    }).join('');
+  }
+  function renderLast(rows, note){
+    $('cap-last').innerHTML = rows.length ? rows.map(r=>`<div class="lr k-${r.kind}"><span class="slotname">${r.slot||'Slot ?'}</span>
+      <span class="lines">${r.found ? r.lines.map(k=>chipS(k)).join('') : ''}</span><span class="tag">${r.tag}</span></div>`).join('')
+      : `<div class="muted">${note || 'Waiting for a tooltip. Hover a piece in your inventory.'}</div>`;
+  }
+
+  // --- putting pieces into the inventory ---
+  function addCaptured(si, lines){
+    const key = lines.slice().sort().join(',');
+    if(state.items[si].some(it=>it.lines.slice().sort().join(',')===key)) return null; // same lines already listed
+    const it = mk(lines.slice()); state.items[si].push(it); state.example = false; save(); render();
+    return it;
+  }
+  function handle(tips){
+    const raw = [], rows = [];
+    let added = 0, dups = 0, skipped = 0, warn = 0, padded = 0; const descs = [];
+    for(const t of tips){
+      raw.push(`${t.slot||'slot ?'}${t.equipped?' (equipped)':''}, ${t.found} hologram line${t.found===1?'':'s'}${t.padded?`, filled with Other x${t.padded}`:''}:\n` + (t.raw.map((r,i)=>`  ${r}  ->  ${t.lines[i]||'(extra, ignored)'}`).join('\n') || '  (none)'));
+      const row = {slot:t.slot, lines:t.lines.slice(), rect:t.rect, found:t.found, kind:'', tag:''};
+      if(t.found===0){ row.kind = 'skip'; row.tag = 'No hologram lines'; skipped++; }
+      else if(t.slot===null){ row.kind = 'warn'; row.tag = "Slot unclear, not added"; warn++; }
+      else{
+        // a piece never rolls the same line twice, so a repeat is a misread: keep the first, call the repeat Other
+        const seen = new Set();
+        row.lines = row.lines.map(k=>{ if(k==='other') return k; if(seen.has(k)) return 'other'; seen.add(k); return k; });
+        const si = SLOTS.indexOf(t.slot), it = addCaptured(si, row.lines);
+        if(it){ added++; if(t.padded) padded++; descs.push(desc(si, row.lines)); row.kind = 'saved'; row.tag = 'Saved' + (t.padded ? ` (${t.padded} filled with Other)` : ''); onSaved(it, si, row.lines); }
+        else{ dups++; row.kind = 'dup'; row.tag = 'Already in your gear'; }
+      }
+      rows.push(row);
+    }
+    $('cap-raw').textContent = raw.join('\n\n') || 'No tooltip found in the last scan.';
+    renderLast(rows, 'No tooltip found in the last scan.'); drawBoxes(rows);
+    if(!tips.length){ setStatus('No tooltip found. Hover a piece in your inventory.', 'ready'); return; }
+    const bits = [];
+    if(added) bits.push('Saved ' + descs.join(' and '));
+    if(padded) bits.push(`${padded} had fewer than 3 lines, filled with Other`);
+    if(dups) bits.push(`${dups} already in your gear`);
+    if(warn) bits.push(`${warn} not added: couldn't tell the slot`);
+    if(skipped) bits.push(`${skipped} had no hologram lines`);
+    setStatus(bits.join('. ') || 'Nothing to add', added ? 'saved' : warn ? 'review' : dups ? 'dup' : 'idle');
+  }
+
+  // --- scanning ---
+  // Reading is slow in proportion to how much text it reads. So after one full-screen read we remember where each
+  // tooltip sits, and from then on only re-read a tooltip whose pixels changed (the "equipped" one rarely does).
+  function tipRect(t, r, scale){
+    const v = CAP.video;
+    const x0 = r.sx + t.box.x0/scale, x1 = r.sx + t.box.x1/scale, y0 = r.sy + t.box.y0/scale, y1 = r.sy + t.box.y1/scale;
+    const w = x1-x0, h = y1-y0;
+    const a = Math.max(0, Math.floor(x0 - w*0.15)), b = Math.max(0, Math.floor(y0 - h*0.15));
+    const c = Math.min(v.videoWidth, Math.ceil(x1 + w*0.15)), d = Math.min(v.videoHeight, Math.ceil(y1 + h*0.3));
+    return {sx:a, sy:b, sw:Math.max(8, c-a), sh:Math.max(8, d-b)};
+  }
+  function learn(tips, startSample){
+    CAP.layout = null;
+    if(!tips.length || tips.some(t=>!t.complete || t.slot===null)) return;
+    const steady = diff(startSample, sample()) < 1.5;
+    CAP.layout = {cols:tips.map(t=>({rect:t.rect, sig: steady ? rectSig(t.rect) : null})), key:regionKey()};
+  }
+  async function scanFast(worker){
+    const L = CAP.layout; if(!L || L.key!==regionKey()) return null;
+    const jobs = [];
+    for(const col of L.cols){
+      const sig = rectSig(col.rect);
+      if(col.sig && diff(col.sig, sig) <= 2.5) continue;       // this tooltip looks the same as last time
+      jobs.push({col, sig, cv:grab(col.rect, 1.25, document.createElement('canvas'))}); // grab all now, read after
+    }
+    if(!jobs.length) return {tips:[], same:true};
+    const tips = [];
+    for(const j of jobs){
+      const t = capParseTooltips(await ocr(worker, j.cv));
+      if(t.length!==1 || !t[0].complete || t[0].slot===null) return null; // moved or cut off: do a full read
+      t[0].rect = j.col.rect; tips.push(t[0]);
+    }
+    for(const j of jobs) j.col.sig = j.sig;
+    return {tips};
+  }
+  // A piece came back with an "Other" line (a misread, or a really unknown line). Look once more, bigger and
+  // sharper, and keep that reading only if it recognises more lines. Only done while the screen has not moved.
+  async function refine(worker, tips, startSample){
+    for(const t of tips){
+      if(!t.rect || !t.found || !t.lines.includes('other')) continue;
+      if(diff(startSample, sample()) > 1.5) return;
+      setStatus('Double-checking a line…', 'reading');
+      const t2 = capParseTooltips(await ocr(worker, grab(t.rect, 2, document.createElement('canvas'), 2.0)))[0];
+      const others = a => a.filter(k=>k==='other').length;
+      if(t2 && t2.found >= t.found && others(t2.lines) < others(t.lines)){
+        Object.assign(t, t2, {slot: t2.slot || t.slot, equipped: t.equipped || t2.equipped, rect: t.rect});
+      }
+    }
+  }
+  async function scan(s, force){
+    if(CAP.busy || !CAP.stream) return;
+    CAP.busy = true; const prevLast = CAP.last; CAP.last = s || sample();
+    const startSample = CAP.last;
+    $('cap-boxes').innerHTML = '';
+    setStatus('Reading tooltip… hold still', 'reading');
+    try{
+      const worker = await getWorker();
+      let res = null;
+      if(!force){
+        res = await scanFast(worker);
+        if(res && res.same && diff(prevLast, startSample) > 6) res = null; // looks like something new appeared elsewhere
+      }
+      if(res && res.same){ setStatus('Same tooltip as before. Hover another piece.', 'ready'); return; }
+      let tips;
+      if(res) tips = res.tips;
+      else{
+        const v = CAP.video, r = regionRect(v.videoWidth, v.videoHeight);
+        const scale = Math.max(0.5, Math.min(1.25, Math.sqrt(2.6e6/(r.sw*r.sh))));
+        tips = capParseTooltips(await ocr(worker, grab(r, scale, CAP.canvas)));
+        tips.forEach(t=>{ t.rect = tipRect(t, r, scale); });
+        learn(tips, startSample);
+      }
+      await refine(worker, tips, startSample);
+      handle(tips);
+    }catch(e){ setStatus('Reading failed: ' + e.message, 'error'); CAP.layout = null; }
+    finally{ CAP.busy = false; }
+  }
+  function tick(){
+    if(!CAP.stream || CAP.busy || !$('cap-auto').checked) return;
+    const s = sample(); if(!s) return;
+    const dPrev = CAP.prev ? diff(CAP.prev, s) : Infinity; CAP.prev = s;
+    // read once the picture has changed since the last read and then held still
+    if(dPrev < 1.5 && diff(CAP.last, s) > 3) scan(s, false);
+  }
+  function startTicker(){
+    stopTicker();
+    try{ // a worker's timer is not slowed down when this tab is in the background
+      CAP.url = URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},250)'], {type:'text/javascript'}));
+      CAP.tw = new Worker(CAP.url); CAP.tw.onmessage = tick;
+      CAP.tw.onerror = () => { stopTicker(); CAP.iv = setInterval(tick, 250); };
+    }catch(e){ CAP.iv = setInterval(tick, 250); }
+  }
+  function stopTicker(){
+    if(CAP.tw){ CAP.tw.terminate(); CAP.tw = null; }
+    if(CAP.url){ URL.revokeObjectURL(CAP.url); CAP.url = null; }
+    if(CAP.iv){ clearInterval(CAP.iv); CAP.iv = null; }
+  }
+
+  // --- share / stop ---
+  function setSharing(on){
+    $('cap-start').textContent = on ? 'Stop sharing' : 'Share screen';
+    $('cap-start').classList.toggle('primary', !on);
+    $('cap-start').classList.toggle('ghost', on);
+    $('cap-now').disabled = !on;
+    vid.hidden = !on; $('cap-ph').hidden = on; fit();
+    $('cap-boxes').innerHTML = '';
+  }
+  // the preview box keeps a fixed 16:9 size (so the page never moves); the video is fitted inside it
+  function fit(){
+    const v = CAP.video; if(!v.videoWidth || vid.hidden) return;
+    const k = Math.min(stage.clientWidth/v.videoWidth, stage.clientHeight/v.videoHeight);
+    vid.style.width = Math.round(v.videoWidth*k) + 'px'; vid.style.height = Math.round(v.videoHeight*k) + 'px';
+  }
+  CAP.video.addEventListener('loadedmetadata', fit); CAP.video.addEventListener('resize', fit); window.addEventListener('resize', fit);
+  try{ new ResizeObserver(fit).observe(stage); }catch(e){}
+  async function start(){
+    try{
+      setStatus('Pick your game window or screen…');
+      CAP.stream = await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:5, max:10}, width:{ideal:3840}, height:{ideal:2160}}, audio:false, selfBrowserSurface:'exclude'});
+    }catch(e){ CAP.stream = null; setStatus(e && e.name==='NotAllowedError' ? 'Sharing was cancelled.' : 'Could not start sharing: ' + (e && e.message || e)); return; }
+    CAP.video.srcObject = CAP.stream;
+    try{ await CAP.video.play(); }catch(e){}
+    CAP.stream.getVideoTracks()[0].addEventListener('ended', stop);
+    CAP.prev = CAP.last = null; CAP.region = null; CAP.layout = null; updateRegionUI(); setSharing(true); startTicker();
+    setStatus('Sharing. Loading the text reader (first time only)…', 'reading');
+    getWorker().then(()=>{ if(CAP.stream && !CAP.busy) setStatus('Ready. Hover a piece in your inventory.', 'ready'); }).catch(e=>setStatus(e.message, 'error'));
+  }
+  function stop(){
+    if(CAP.stream){ CAP.stream.getTracks().forEach(t=>t.stop()); CAP.stream = null; }
+    CAP.video.srcObject = null; CAP.layout = null; stopTicker(); setSharing(false);
+    setStatus('Not sharing');
+  }
+
+  // --- drag on the preview to limit reading to one area ---
+  const sel = $('cap-sel');
+  let drag = null;
+  const clamp01 = n => n<0 ? 0 : n>1 ? 1 : n;
+  const pt = e => { const b = vid.getBoundingClientRect(); return {x:clamp01((e.clientX-b.left)/b.width), y:clamp01((e.clientY-b.top)/b.height)}; };
+  const box = (a, b) => ({x:Math.min(a.x,b.x), y:Math.min(a.y,b.y), w:Math.abs(a.x-b.x), h:Math.abs(a.y-b.y)});
+  function drawSel(r){
+    sel.hidden = !r;
+    if(r){ sel.style.left = r.x*100+'%'; sel.style.top = r.y*100+'%'; sel.style.width = r.w*100+'%'; sel.style.height = r.h*100+'%'; }
+  }
+  function updateRegionUI(){ drawSel(CAP.region); $('cap-reset').hidden = !CAP.region; }
+  vid.addEventListener('pointerdown', e=>{ if(!CAP.stream) return; drag = pt(e); try{ vid.setPointerCapture(e.pointerId); }catch(_){} drawSel({x:drag.x, y:drag.y, w:0, h:0}); e.preventDefault(); });
+  vid.addEventListener('pointermove', e=>{ if(drag) drawSel(box(drag, pt(e))); });
+  vid.addEventListener('pointerup', e=>{
+    if(!drag) return;
+    const r = box(drag, pt(e)); drag = null;
+    if(r.w > 0.05 && r.h > 0.05){ CAP.region = r; CAP.prev = CAP.last = null; CAP.layout = null; }
+    updateRegionUI();
+  });
+  $('cap-reset').addEventListener('click', ()=>{ CAP.region = null; CAP.prev = CAP.last = null; CAP.layout = null; updateRegionUI(); });
+  $('cap-start').addEventListener('click', ()=>{ CAP.stream ? stop() : start(); });
+  $('cap-now').addEventListener('click', ()=>{ if(CAP.busy) setStatus('Still reading the last one…', 'reading'); else scan(null, true); });
+  renderLast([]);
+})();
+// ===== end capture runtime =====
+
+// ===== if the page was pasted into the file twice, drop every copy after the first =====
+(function(){
+  const dedupe = () => document.querySelectorAll('.wrap').forEach((w,i)=>{ if(i>0) w.remove(); });
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', dedupe); else dedupe();
+})();
+
+// ===== collapsible sections: remember which are open =====
+(function(){
+  const KEY = 'threeLineSetSolver.open'; let saved = {};
+  try{ saved = JSON.parse(localStorage.getItem(KEY)) || {}; }catch(e){}
+  document.querySelectorAll('details.coll').forEach(d=>{
+    const k = d.dataset.k; if(k in saved) d.open = !!saved[k];
+    d.addEventListener('toggle', ()=>{ saved[k] = d.open; try{ localStorage.setItem(KEY, JSON.stringify(saved)); }catch(e){} });
+  });
+})();
+</script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"c72087caa714418e9ad7ff9dfa64fb94","r":1,"spa":2}' crossorigin="anonymous"></script>
+</body>
+</html>
+
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
